@@ -1,0 +1,1111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+<meta name="theme-color" content="#0f4c35"/>
+<meta name="description" content="AlertLedger — SMS Alert Engine for Uganda Schools & Businesses"/>
+<title>AlertLedger</title>
+
+<!-- Tailwind via CDN — single JS file, no build step, cached after first load -->
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        brand: {
+          50:  '#edfaf3', 100: '#d3f4e2', 200: '#aae8c8',
+          300: '#72d5a7', 400: '#3eba82', 500: '#1a9e67',
+          600: '#0f7f52', 700: '#0f4c35', 800: '#0a3325', 900: '#061e16',
+        },
+        amber: { 400: '#fbbf24', 500: '#f59e0b' },
+      },
+      fontFamily: {
+        sans: ['"DM Sans"', 'system-ui', 'sans-serif'],
+        mono: ['"DM Mono"', 'monospace'],
+      },
+    }
+  }
+}
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet"/>
+
+<style>
+  /* ── Base resets ──────────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-tap-highlight-color: transparent; }
+  body { font-family: 'DM Sans', system-ui, sans-serif; background: #f0faf5; }
+
+  /* ── Scrollbar ───────────────────────────────────────────────── */
+  ::-webkit-scrollbar { width: 4px; height: 4px; }
+  ::-webkit-scrollbar-track { background: #f1f1f1; }
+  ::-webkit-scrollbar-thumb { background: #0f7f52; border-radius: 4px; }
+
+  /* ── Page sections (SPA routing) ─────────────────────────────── */
+  .page { display: none; }
+  .page.active { display: block; }
+
+  /* ── Toast notification ───────────────────────────────────────── */
+  #toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%);
+    z-index: 9999; min-width: 260px; max-width: 90vw;
+    padding: 12px 20px; border-radius: 10px;
+    font-size: 14px; font-weight: 500; text-align: center;
+    opacity: 0; transition: opacity 0.3s ease;
+    pointer-events: none;
+  }
+  #toast.show { opacity: 1; }
+  #toast.success { background: #0f4c35; color: #d3f4e2; }
+  #toast.error   { background: #7f1d1d; color: #fecaca; }
+  #toast.info    { background: #1e3a5f; color: #bfdbfe; }
+
+  /* ── Drop-zone ────────────────────────────────────────────────── */
+  #drop-zone {
+    border: 2.5px dashed #3eba82; border-radius: 12px;
+    transition: background 0.2s, border-color 0.2s; cursor: pointer;
+  }
+  #drop-zone.drag-over { background: #edfaf3; border-color: #0f4c35; }
+  #drop-zone input[type="file"] { display: none; }
+
+  /* ── Table sticky header on mobile ───────────────────────────── */
+  .tbl-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tbl-wrap table { min-width: 540px; }
+  .tbl-wrap th { position: sticky; top: 0; z-index: 1; }
+
+  /* ── Checkbox style ───────────────────────────────────────────── */
+  .row-check {
+    width: 18px; height: 18px; accent-color: #0f7f52;
+    cursor: pointer; flex-shrink: 0;
+  }
+
+  /* ── Spinner ──────────────────────────────────────────────────── */
+  .spin {
+    display: inline-block; width: 16px; height: 16px;
+    border: 2.5px solid rgba(255,255,255,0.35);
+    border-top-color: #fff; border-radius: 50%;
+    animation: spin 0.6s linear infinite; vertical-align: middle; margin-right: 6px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── Badge ────────────────────────────────────────────────────── */
+  .badge {
+    display: inline-block; padding: 2px 8px; border-radius: 999px;
+    font-size: 11px; font-weight: 600; letter-spacing: 0.02em;
+  }
+  .badge-green   { background: #d3f4e2; color: #0f4c35; }
+  .badge-amber   { background: #fef3c7; color: #92400e; }
+  .badge-red     { background: #fee2e2; color: #7f1d1d; }
+  .badge-gray    { background: #f3f4f6; color: #374151; }
+  .badge-blue    { background: #dbeafe; color: #1e3a8a; }
+
+  /* ── Skeleton loader ──────────────────────────────────────────── */
+  .skeleton {
+    background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+    background-size: 200% 100%; animation: shimmer 1.4s infinite; border-radius: 6px;
+  }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+  /* ── Mobile nav bottom bar ────────────────────────────────────── */
+  #bottom-nav a { -webkit-tap-highlight-color: transparent; }
+  #bottom-nav a.active { color: #0f4c35; }
+  #bottom-nav a.active .nav-icon { color: #0f4c35; }
+
+  /* ── Card hover (touch devices skip hover) ────────────────────── */
+  @media (hover: hover) {
+    .record-row:hover { background: #f0faf5; }
+  }
+
+  /* ── Buttons: large tap targets for cheap phones ──────────────── */
+  .btn-primary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 13px 22px; border-radius: 10px; font-weight: 600; font-size: 15px;
+    background: #0f4c35; color: #fff; border: none; cursor: pointer;
+    transition: background 0.15s; touch-action: manipulation;
+    -webkit-user-select: none; user-select: none;
+    min-height: 48px;
+  }
+  .btn-primary:active { background: #0a3325; }
+  .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-secondary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 11px 18px; border-radius: 10px; font-weight: 600; font-size: 14px;
+    background: transparent; color: #0f4c35; border: 1.5px solid #0f7f52;
+    cursor: pointer; transition: background 0.15s; min-height: 44px;
+    touch-action: manipulation;
+  }
+  .btn-secondary:active { background: #edfaf3; }
+  .btn-secondary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .btn-danger {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+    padding: 11px 18px; border-radius: 10px; font-weight: 600; font-size: 14px;
+    background: #dc2626; color: #fff; border: none; cursor: pointer; min-height: 44px;
+    touch-action: manipulation;
+  }
+  .btn-danger:active { background: #b91c1c; }
+
+  /* ── Input ────────────────────────────────────────────────────── */
+  .inp {
+    width: 100%; padding: 11px 14px; border-radius: 9px; font-size: 15px;
+    border: 1.5px solid #d1d5db; background: #fff; color: #111;
+    transition: border-color 0.15s; font-family: inherit;
+    min-height: 48px;
+  }
+  .inp:focus { outline: none; border-color: #0f7f52; box-shadow: 0 0 0 3px rgba(15,127,82,0.12); }
+
+  /* ── Modal ────────────────────────────────────────────────────── */
+  #modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.55);
+    z-index: 1000; display: none; align-items: center; justify-content: center;
+    padding: 16px;
+  }
+  #modal-overlay.open { display: flex; }
+  #modal-box {
+    background: #fff; border-radius: 16px; padding: 24px;
+    width: 100%; max-width: 420px; max-height: 90vh; overflow-y: auto;
+  }
+</style>
+</head>
+
+<body class="min-h-screen bg-brand-50">
+
+<!-- ══════════════════════════════════════════════════════════════════
+     TOAST
+═══════════════════════════════════════════════════════════════════ -->
+<div id="toast"></div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     MODAL
+═══════════════════════════════════════════════════════════════════ -->
+<div id="modal-overlay" role="dialog" aria-modal="true">
+  <div id="modal-box">
+    <div class="flex justify-between items-start mb-4">
+      <h3 id="modal-title" class="text-lg font-bold text-gray-800"></h3>
+      <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600 text-2xl leading-none">&times;</button>
+    </div>
+    <div id="modal-body"></div>
+  </div>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     PAGE: LOGIN / REGISTER
+═══════════════════════════════════════════════════════════════════ -->
+<div id="page-auth" class="page active min-h-screen flex flex-col justify-center items-center px-4 py-10">
+
+  <!-- Branding -->
+  <div class="mb-8 text-center">
+    <div class="inline-flex items-center justify-center w-16 h-16 rounded-2xl bg-brand-700 mb-4 shadow-lg">
+      <svg class="w-9 h-9 text-brand-200" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round"
+          d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V4a2 2 0 10-4 0v1.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"/>
+      </svg>
+    </div>
+    <h1 class="text-3xl font-bold text-brand-800 tracking-tight">AlertLedger</h1>
+    <p class="text-brand-600 text-sm mt-1">SMS Alert Engine — Uganda</p>
+  </div>
+
+  <!-- Auth card -->
+  <div class="w-full max-w-sm bg-white rounded-2xl shadow-md p-6">
+
+    <!-- Tabs -->
+    <div class="flex mb-6 bg-gray-100 rounded-xl p-1">
+      <button id="tab-login"    onclick="switchAuthTab('login')"
+        class="flex-1 py-2 rounded-lg text-sm font-600 transition-all bg-white text-brand-700 shadow-sm font-semibold">
+        Log In
+      </button>
+      <button id="tab-register" onclick="switchAuthTab('register')"
+        class="flex-1 py-2 rounded-lg text-sm font-600 transition-all text-gray-500 font-semibold">
+        Register
+      </button>
+    </div>
+
+    <!-- LOGIN FORM -->
+    <form id="form-login" onsubmit="handleLogin(event)" class="space-y-4">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Username</label>
+        <input class="inp" type="text" id="login-username" placeholder="e.g. admin" autocomplete="username" required/>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Password</label>
+        <input class="inp" type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" required/>
+      </div>
+      <button type="submit" class="btn-primary w-full" id="btn-login">Log In</button>
+      <p class="text-center text-xs text-gray-400">Demo: admin / Admin@1234</p>
+    </form>
+
+    <!-- REGISTER FORM -->
+    <form id="form-register" onsubmit="handleRegister(event)" class="space-y-4 hidden">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Institution Name</label>
+        <input class="inp" type="text" id="reg-institution" placeholder="e.g. Kampala Primary School" required/>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Username</label>
+        <input class="inp" type="text" id="reg-username" placeholder="Choose a username" autocomplete="username" required/>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Password</label>
+        <input class="inp" type="password" id="reg-password" placeholder="Min 8 characters" autocomplete="new-password" required/>
+      </div>
+      <button type="submit" class="btn-primary w-full" id="btn-register">Create Account</button>
+    </form>
+
+  </div>
+  <p class="mt-6 text-xs text-brand-600 text-center">Powered by AlertLedger v1.0</p>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     APP SHELL (shown after login)
+═══════════════════════════════════════════════════════════════════ -->
+<div id="app-shell" class="hidden flex flex-col min-h-screen">
+
+  <!-- Top bar -->
+  <header class="bg-brand-700 text-white px-4 py-3 flex items-center justify-between shadow-md sticky top-0 z-50">
+    <div>
+      <div class="text-xs text-brand-300 uppercase tracking-widest font-mono">AlertLedger</div>
+      <div id="hdr-institution" class="font-bold text-base truncate max-w-[200px]">Loading…</div>
+    </div>
+    <button onclick="handleLogout()" class="text-brand-300 hover:text-white text-sm font-semibold flex items-center gap-1 touch-manipulation">
+      <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/>
+      </svg>
+      Out
+    </button>
+  </header>
+
+  <!-- Main content -->
+  <main class="flex-1 overflow-y-auto pb-20">
+
+    <!-- ── PAGE: DASHBOARD ────────────────────────────────────── -->
+    <section id="page-dashboard" class="page active p-4 space-y-4">
+
+      <!-- Stats row -->
+      <div class="grid grid-cols-3 gap-3">
+        <div class="bg-white rounded-xl p-3 shadow-sm text-center">
+          <div id="stat-total" class="text-2xl font-bold text-brand-700">–</div>
+          <div class="text-xs text-gray-500 mt-0.5">Records</div>
+        </div>
+        <div class="bg-white rounded-xl p-3 shadow-sm text-center">
+          <div id="stat-debts" class="text-2xl font-bold text-amber-500">–</div>
+          <div class="text-xs text-gray-500 mt-0.5">Owe Balance</div>
+        </div>
+        <div class="bg-white rounded-xl p-3 shadow-sm text-center">
+          <div id="stat-sent" class="text-2xl font-bold text-blue-600">–</div>
+          <div class="text-xs text-gray-500 mt-0.5">SMS Sent</div>
+        </div>
+      </div>
+
+      <!-- Filter bar -->
+      <div class="bg-white rounded-xl shadow-sm p-3 space-y-2">
+        <div class="flex gap-2">
+          <input class="inp flex-1 text-sm" type="search" id="search-input"
+            placeholder="Search name or phone…" oninput="debounceSearch()"/>
+          <select class="inp w-auto text-sm" id="group-filter" onchange="loadRecords()">
+            <option value="">All Groups</option>
+          </select>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button onclick="toggleDebtFilter()" id="btn-debt-filter"
+            class="btn-secondary text-sm px-3 py-2 flex-1">
+            💰 Filter Debts
+          </button>
+          <button onclick="clearSelection()" class="btn-secondary text-sm px-3 py-2">
+            ✕ Uncheck All
+          </button>
+        </div>
+      </div>
+
+      <!-- Action buttons (bottom of table, sticky feel) -->
+      <div id="action-bar" class="hidden bg-brand-700 rounded-xl p-3 space-y-2 shadow-lg">
+        <div class="text-white text-sm font-semibold" id="selected-count">0 selected</div>
+        <button onclick="sendStatusAlerts()" class="btn-primary w-full bg-brand-500 hover:bg-brand-400" id="btn-status-alert">
+          📣 Send Status Alerts
+        </button>
+      </div>
+
+      <!-- Debt broadcast bar (shown when debt filter active) -->
+      <div id="debt-bar" class="hidden bg-amber-50 border border-amber-300 rounded-xl p-3 space-y-2">
+        <p class="text-amber-800 text-sm font-semibold">💰 Debt Broadcast Mode</p>
+        <textarea id="debt-custom-msg" class="inp text-sm resize-none h-20"
+          placeholder="Custom message (leave blank for default). Use {{full_name}}, {{current_balance}}."></textarea>
+        <button onclick="sendDebtBlast()" class="btn-primary w-full" id="btn-debt-blast">
+          📤 Broadcast Custom Debt SMS
+        </button>
+      </div>
+
+      <!-- Records table -->
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <span class="font-semibold text-gray-700 text-sm">Records</span>
+          <label class="flex items-center gap-2 text-xs text-gray-500 cursor-pointer">
+            <input type="checkbox" id="check-all" onchange="toggleAll(this)" class="row-check"/>
+            Select All
+          </label>
+        </div>
+        <div class="tbl-wrap">
+          <table class="w-full text-sm">
+            <thead class="bg-gray-50 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+              <tr>
+                <th class="px-3 py-3 text-left w-8"></th>
+                <th class="px-3 py-3 text-left">Name</th>
+                <th class="px-3 py-3 text-left">Group</th>
+                <th class="px-3 py-3 text-left">Phone</th>
+                <th class="px-3 py-3 text-right">Balance (UGX)</th>
+                <th class="px-3 py-3 text-center">Action</th>
+              </tr>
+            </thead>
+            <tbody id="records-body">
+              <tr><td colspan="6" class="px-4 py-8 text-center text-gray-400">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div id="records-footer" class="px-4 py-2 text-xs text-gray-400 border-t border-gray-50 text-right"></div>
+      </div>
+
+    </section>
+
+    <!-- ── PAGE: UPLOAD ───────────────────────────────────────── -->
+    <section id="page-upload" class="page p-4 space-y-4">
+
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <h2 class="font-bold text-gray-800 text-base mb-1">📂 Bulk Import</h2>
+        <p class="text-xs text-gray-500 mb-4">Upload an Excel or CSV file with columns:<br/>
+          <span class="font-mono text-brand-700">Name, Group, Phone, Balance</span>
+        </p>
+
+        <!-- Drop zone -->
+        <div id="drop-zone" class="rounded-xl p-8 text-center mb-4"
+          ondragover="handleDragOver(event)" ondragleave="handleDragLeave()"
+          ondrop="handleDrop(event)" onclick="document.getElementById('file-input').click()">
+          <input type="file" id="file-input" accept=".csv,.xlsx,.xls" onchange="handleFileSelect(event)"/>
+          <div id="drop-icon" class="text-4xl mb-2">📤</div>
+          <p id="drop-label" class="text-brand-700 font-semibold text-sm">Tap or drag file here</p>
+          <p class="text-xs text-gray-400 mt-1">CSV, XLSX, XLS — max 5 MB</p>
+        </div>
+
+        <!-- Import result -->
+        <div id="import-result" class="hidden rounded-xl p-4 bg-brand-50 border border-brand-200 text-sm space-y-1"></div>
+
+        <!-- Download template -->
+        <div class="mt-4 pt-4 border-t border-gray-100">
+          <p class="text-xs text-gray-500 mb-2">📥 Download CSV template:</p>
+          <button onclick="downloadTemplate()" class="btn-secondary text-sm w-full">
+            Download Template CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- Manual add -->
+      <div class="bg-white rounded-xl shadow-sm p-5">
+        <h2 class="font-bold text-gray-800 text-base mb-4">➕ Add Single Record</h2>
+        <form onsubmit="handleAddRecord(event)" class="space-y-3" id="form-add-record">
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Full Name *</label>
+            <input class="inp" id="add-name" placeholder="e.g. Aisha Nakato" required/>
+          </div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Group / Class *</label>
+              <input class="inp" id="add-group" placeholder="e.g. P.6 East"/>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-gray-600 mb-1">Balance (UGX)</label>
+              <input class="inp" id="add-balance" type="number" min="0" placeholder="0"/>
+            </div>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Primary Phone *</label>
+            <input class="inp" id="add-phone" type="tel" placeholder="+256700000000" required/>
+          </div>
+          <div>
+            <label class="block text-xs font-semibold text-gray-600 mb-1">Secondary Phone</label>
+            <input class="inp" id="add-phone2" type="tel" placeholder="+256700000000 (optional)"/>
+          </div>
+          <button type="submit" class="btn-primary w-full" id="btn-add-record">Add Record</button>
+        </form>
+      </div>
+
+    </section>
+
+    <!-- ── PAGE: LOGS ─────────────────────────────────────────── -->
+    <section id="page-logs" class="page p-4 space-y-4">
+
+      <!-- Stats summary -->
+      <div class="grid grid-cols-4 gap-2">
+        <div class="bg-white rounded-xl p-2 shadow-sm text-center">
+          <div id="log-stat-total" class="text-xl font-bold text-gray-700">–</div>
+          <div class="text-xs text-gray-500">Total</div>
+        </div>
+        <div class="bg-white rounded-xl p-2 shadow-sm text-center">
+          <div id="log-stat-sent" class="text-xl font-bold text-blue-600">–</div>
+          <div class="text-xs text-gray-500">Sent</div>
+        </div>
+        <div class="bg-white rounded-xl p-2 shadow-sm text-center">
+          <div id="log-stat-delivered" class="text-xl font-bold text-brand-600">–</div>
+          <div class="text-xs text-gray-500">Delivered</div>
+        </div>
+        <div class="bg-white rounded-xl p-2 shadow-sm text-center">
+          <div id="log-stat-failed" class="text-xl font-bold text-red-500">–</div>
+          <div class="text-xs text-gray-500">Failed</div>
+        </div>
+      </div>
+
+      <div class="bg-white rounded-xl shadow-sm overflow-hidden">
+        <div class="px-4 py-3 border-b border-gray-100 flex items-center justify-between">
+          <span class="font-semibold text-gray-700 text-sm">Alert History</span>
+          <button onclick="loadLogs()" class="text-xs text-brand-600 font-semibold">Refresh</button>
+        </div>
+        <div id="logs-body" class="divide-y divide-gray-50">
+          <div class="px-4 py-6 text-center text-gray-400 text-sm">Loading logs…</div>
+        </div>
+        <div class="px-4 py-3 border-t border-gray-100 flex gap-2 justify-center">
+          <button id="logs-prev" onclick="logsPage(-1)" class="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40">← Prev</button>
+          <span id="logs-page-label" class="text-xs text-gray-500 self-center">Page 1</span>
+          <button id="logs-next" onclick="logsPage(1)"  class="btn-secondary text-xs px-3 py-1.5 disabled:opacity-40">Next →</button>
+        </div>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- Bottom nav (fixed) -->
+  <nav id="bottom-nav" class="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 flex z-40">
+    <a onclick="showAppPage('dashboard')" class="flex-1 flex flex-col items-center py-2 text-gray-500 active cursor-pointer touch-manipulation" id="nav-dashboard">
+      <svg class="nav-icon w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/>
+      </svg>
+      <span class="text-xs mt-0.5 font-medium">Dashboard</span>
+    </a>
+    <a onclick="showAppPage('upload')" class="flex-1 flex flex-col items-center py-2 text-gray-500 cursor-pointer touch-manipulation" id="nav-upload">
+      <svg class="nav-icon w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+      </svg>
+      <span class="text-xs mt-0.5 font-medium">Import</span>
+    </a>
+    <a onclick="showAppPage('logs')" class="flex-1 flex flex-col items-center py-2 text-gray-500 cursor-pointer touch-manipulation" id="nav-logs">
+      <svg class="nav-icon w-6 h-6" fill="none" stroke="currentColor" stroke-width="1.8" viewBox="0 0 24 24">
+        <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"/>
+      </svg>
+      <span class="text-xs mt-0.5 font-medium">Logs</span>
+    </a>
+  </nav>
+</div>
+
+<!-- ══════════════════════════════════════════════════════════════════
+     JAVASCRIPT — Vanilla, no dependencies
+═══════════════════════════════════════════════════════════════════ -->
+<script>
+'use strict';
+
+// ── State ─────────────────────────────────────────────────────────────
+const S = {
+  user:         null,
+  records:      [],
+  groups:       [],
+  debtMode:     false,
+  selectedIds:  new Set(),
+  logsOffset:   0,
+  logsLimit:    20,
+  searchTimer:  null,
+};
+
+// ── API helper ────────────────────────────────────────────────────────
+async function api(method, path, body) {
+  const opts = {
+    method,
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+  };
+  if (body) opts.body = JSON.stringify(body);
+  const res = await fetch('/api' + path, opts);
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+  return data;
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────
+let toastTimer;
+function toast(msg, type = 'info', dur = 3500) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className = `show ${type}`;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), dur);
+}
+
+// ── Page routing ──────────────────────────────────────────────────────
+function showPage(id) {
+  document.querySelectorAll('#page-auth, #page-dashboard, #page-upload, #page-logs')
+    .forEach(p => p.classList.remove('active'));
+  const el = document.getElementById(id);
+  if (el) el.classList.add('active');
+}
+
+function showAuthPage() {
+  document.getElementById('app-shell').classList.add('hidden');
+  document.getElementById('page-auth').classList.remove('hidden');
+  showPage('page-auth');
+}
+
+function showAppPage(name) {
+  document.getElementById('page-auth').classList.add('hidden');
+  document.getElementById('app-shell').classList.remove('hidden');
+  ['dashboard','upload','logs'].forEach(n => {
+    document.getElementById(`page-${n}`).classList.remove('active');
+    const nav = document.getElementById(`nav-${n}`);
+    nav.classList.remove('active', 'text-brand-700');
+    nav.classList.add('text-gray-500');
+  });
+  document.getElementById(`page-${name}`).classList.add('active');
+  const activeNav = document.getElementById(`nav-${name}`);
+  activeNav.classList.add('active', 'text-brand-700');
+  activeNav.classList.remove('text-gray-500');
+
+  if (name === 'logs') { loadLogs(); loadSmsStats(); }
+}
+
+// ── Auth tab switch ───────────────────────────────────────────────────
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('form-login').classList.toggle('hidden', !isLogin);
+  document.getElementById('form-register').classList.toggle('hidden', isLogin);
+  document.getElementById('tab-login').className    = isLogin
+    ? 'flex-1 py-2 rounded-lg text-sm font-semibold transition-all bg-white text-brand-700 shadow-sm'
+    : 'flex-1 py-2 rounded-lg text-sm font-semibold transition-all text-gray-500';
+  document.getElementById('tab-register').className = isLogin
+    ? 'flex-1 py-2 rounded-lg text-sm font-semibold transition-all text-gray-500'
+    : 'flex-1 py-2 rounded-lg text-sm font-semibold transition-all bg-white text-brand-700 shadow-sm';
+}
+
+// ── Login ─────────────────────────────────────────────────────────────
+async function handleLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-login');
+  btn.innerHTML = '<span class="spin"></span>Logging in…';
+  btn.disabled = true;
+  try {
+    const data = await api('POST', '/auth/login', {
+      username: document.getElementById('login-username').value,
+      password: document.getElementById('login-password').value,
+    });
+    S.user = data;
+    document.getElementById('hdr-institution').textContent = data.institutionName;
+    showAppPage('dashboard');
+    loadRecords();
+    loadSmsStats();
+    toast(`Welcome back, ${data.username}!`, 'success');
+  } catch(err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.textContent = 'Log In';
+    btn.disabled = false;
+  }
+}
+
+// ── Register ──────────────────────────────────────────────────────────
+async function handleRegister(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-register');
+  btn.innerHTML = '<span class="spin"></span>Creating…';
+  btn.disabled = true;
+  try {
+    await api('POST', '/auth/register', {
+      institution_name: document.getElementById('reg-institution').value,
+      username:         document.getElementById('reg-username').value,
+      password:         document.getElementById('reg-password').value,
+    });
+    const meData = await api('GET', '/auth/me');
+    S.user = meData;
+    document.getElementById('hdr-institution').textContent = meData.institutionName;
+    showAppPage('dashboard');
+    loadRecords();
+    toast('Account created! Welcome to AlertLedger.', 'success');
+  } catch(err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.textContent = 'Create Account';
+    btn.disabled = false;
+  }
+}
+
+// ── Logout ────────────────────────────────────────────────────────────
+async function handleLogout() {
+  await api('POST', '/auth/logout').catch(() => {});
+  S.user = null;
+  S.records = [];
+  S.selectedIds.clear();
+  showAuthPage();
+  toast('Logged out.', 'info');
+}
+
+// ── Load records ──────────────────────────────────────────────────────
+async function loadRecords() {
+  const body = document.getElementById('records-body');
+  body.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center">
+    <div class="skeleton h-4 w-48 mx-auto mb-2"></div>
+    <div class="skeleton h-4 w-36 mx-auto"></div>
+  </td></tr>`;
+
+  const group = document.getElementById('group-filter').value;
+  const search = document.getElementById('search-input').value.trim();
+  const debt   = S.debtMode ? '1' : '';
+
+  let qs = new URLSearchParams();
+  if (group)  qs.set('group', group);
+  if (debt)   qs.set('debt', '1');
+  if (search) qs.set('search', search);
+
+  try {
+    const data = await api('GET', `/records?${qs}`);
+    S.records = data.records;
+
+    // Update group filter options (preserve selection)
+    const sel = document.getElementById('group-filter');
+    const cur = sel.value;
+    sel.innerHTML = '<option value="">All Groups</option>' +
+      data.groups.map(g => `<option value="${esc(g)}" ${g===cur?'selected':''}>${esc(g)}</option>`).join('');
+
+    // Stats
+    const debts = data.records.filter(r => r.current_balance > 0).length;
+    document.getElementById('stat-total').textContent = data.total;
+    document.getElementById('stat-debts').textContent = debts;
+
+    renderTable(data.records);
+  } catch(err) {
+    body.innerHTML = `<tr><td colspan="6" class="px-4 py-6 text-center text-red-500">${esc(err.message)}</td></tr>`;
+  }
+}
+
+function renderTable(records) {
+  const body = document.getElementById('records-body');
+  const footer = document.getElementById('records-footer');
+
+  if (records.length === 0) {
+    body.innerHTML = `<tr><td colspan="6" class="px-4 py-8 text-center text-gray-400 text-sm">
+      No records found. <a onclick="showAppPage('upload')" class="text-brand-600 font-semibold cursor-pointer">Import some →</a>
+    </td></tr>`;
+    footer.textContent = '';
+    return;
+  }
+
+  body.innerHTML = records.map(r => {
+    const checked   = S.selectedIds.has(r.id) ? 'checked' : '';
+    const hasDebt   = r.current_balance > 0;
+    const balClass  = hasDebt ? 'text-amber-600 font-semibold' : 'text-gray-500';
+    const balFmt    = Number(r.current_balance).toLocaleString('en-UG');
+    return `
+    <tr class="record-row border-b border-gray-50 last:border-0 transition-colors" data-id="${r.id}">
+      <td class="px-3 py-3">
+        <input type="checkbox" class="row-check" data-id="${r.id}" ${checked}
+          onchange="toggleSelect(${r.id}, this.checked)"/>
+      </td>
+      <td class="px-3 py-3">
+        <div class="font-medium text-gray-800 text-sm">${esc(r.full_name)}</div>
+      </td>
+      <td class="px-3 py-3">
+        <span class="badge badge-green text-xs">${esc(r.category_group)}</span>
+      </td>
+      <td class="px-3 py-3 font-mono text-xs text-gray-600">${esc(r.contact_phone)}</td>
+      <td class="px-3 py-3 text-right ${balClass} text-sm">${balFmt}</td>
+      <td class="px-3 py-3 text-center">
+        <button onclick="openEditModal(${r.id})"
+          class="text-brand-600 text-xs font-semibold hover:underline touch-manipulation">Edit</button>
+      </td>
+    </tr>`;
+  }).join('');
+
+  footer.textContent = `Showing ${records.length} record${records.length !== 1 ? 's' : ''}`;
+  updateActionBar();
+}
+
+// ── Selection logic ───────────────────────────────────────────────────
+function toggleSelect(id, checked) {
+  if (checked) S.selectedIds.add(id);
+  else         S.selectedIds.delete(id);
+  updateActionBar();
+}
+
+function toggleAll(master) {
+  document.querySelectorAll('.row-check[data-id]').forEach(cb => {
+    const id = parseInt(cb.dataset.id, 10);
+    cb.checked = master.checked;
+    if (master.checked) S.selectedIds.add(id);
+    else                S.selectedIds.delete(id);
+  });
+  updateActionBar();
+}
+
+function clearSelection() {
+  S.selectedIds.clear();
+  document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+  updateActionBar();
+}
+
+function updateActionBar() {
+  const bar   = document.getElementById('action-bar');
+  const count = S.selectedIds.size;
+  document.getElementById('selected-count').textContent =
+    `${count} record${count !== 1 ? 's' : ''} selected`;
+  bar.classList.toggle('hidden', count === 0);
+}
+
+// ── Debt filter (Feature C) ───────────────────────────────────────────
+function toggleDebtFilter() {
+  S.debtMode = !S.debtMode;
+  const btn  = document.getElementById('btn-debt-filter');
+  const bar  = document.getElementById('debt-bar');
+  if (S.debtMode) {
+    btn.classList.replace('btn-secondary', 'btn-danger');
+    btn.textContent = '✕ Clear Debt Filter';
+    bar.classList.remove('hidden');
+  } else {
+    btn.classList.replace('btn-danger', 'btn-secondary');
+    btn.textContent = '💰 Filter Debts';
+    bar.classList.add('hidden');
+  }
+  clearSelection();
+  loadRecords();
+}
+
+// ── Search debounce ───────────────────────────────────────────────────
+function debounceSearch() {
+  clearTimeout(S.searchTimer);
+  S.searchTimer = setTimeout(loadRecords, 380);
+}
+
+// ── Feature B: Status alerts ──────────────────────────────────────────
+async function sendStatusAlerts() {
+  if (S.selectedIds.size === 0) { toast('No records selected', 'info'); return; }
+  const btn = document.getElementById('btn-status-alert');
+  btn.innerHTML = '<span class="spin"></span>Sending…';
+  btn.disabled = true;
+  try {
+    const res = await api('POST', '/sms/status-alert', {
+      recordIds: Array.from(S.selectedIds),
+    });
+    toast(`✅ ${res.sent} sent, ${res.failed} failed out of ${res.total}`, 'success', 5000);
+    S.selectedIds.clear();
+    document.querySelectorAll('.row-check').forEach(cb => cb.checked = false);
+    updateActionBar();
+    loadSmsStats();
+  } catch(err) {
+    toast('Send failed: ' + err.message, 'error');
+  } finally {
+    btn.textContent = '📣 Send Status Alerts';
+    btn.disabled = false;
+  }
+}
+
+// ── Feature C: Debt blast ─────────────────────────────────────────────
+async function sendDebtBlast() {
+  const btn  = document.getElementById('btn-debt-blast');
+  const tmpl = document.getElementById('debt-custom-msg').value.trim();
+  const grp  = document.getElementById('group-filter').value;
+
+  if (!confirm(`Send debt reminders to ALL records with outstanding balance${grp ? ` in "${grp}"` : ''}? This cannot be undone.`)) return;
+
+  btn.innerHTML = '<span class="spin"></span>Broadcasting…';
+  btn.disabled = true;
+  try {
+    const res = await api('POST', '/sms/debt-blast', {
+      customTemplate: tmpl || null,
+      groupFilter:    grp  || null,
+    });
+    if (res.sent === 0 && res.total === 0) {
+      toast('No records with outstanding balances.', 'info');
+    } else {
+      toast(`📤 ${res.sent} sent, ${res.failed} failed (${res.total} total)`, 'success', 5000);
+    }
+    loadSmsStats();
+  } catch(err) {
+    toast('Broadcast failed: ' + err.message, 'error');
+  } finally {
+    btn.textContent = '📤 Broadcast Custom Debt SMS';
+    btn.disabled = false;
+  }
+}
+
+// ── SMS stats ─────────────────────────────────────────────────────────
+async function loadSmsStats() {
+  try {
+    const s = await api('GET', '/sms/stats');
+    document.getElementById('stat-sent').textContent    = s.total || 0;
+    document.getElementById('log-stat-total').textContent     = s.total || 0;
+    document.getElementById('log-stat-sent').textContent      = s.sent  || 0;
+    document.getElementById('log-stat-delivered').textContent = s.delivered || 0;
+    document.getElementById('log-stat-failed').textContent    = s.failed || 0;
+  } catch {}
+}
+
+// ── Logs page ─────────────────────────────────────────────────────────
+async function loadLogs() {
+  const body = document.getElementById('logs-body');
+  body.innerHTML = '<div class="px-4 py-6 text-center text-gray-400 text-sm">Loading…</div>';
+  try {
+    const data = await api('GET', `/sms/logs?limit=${S.logsLimit}&offset=${S.logsOffset}`);
+    if (data.logs.length === 0) {
+      body.innerHTML = '<div class="px-4 py-6 text-center text-gray-400 text-sm">No alerts sent yet.</div>';
+      return;
+    }
+    body.innerHTML = data.logs.map(log => {
+      const statusBadge = {
+        delivered: 'badge-green',
+        sent:      'badge-blue',
+        failed:    'badge-red',
+        pending:   'badge-gray',
+      }[log.gateway_status] || 'badge-gray';
+
+      const typeBadge = {
+        debt:   'badge-amber',
+        status: 'badge-blue',
+        custom: 'badge-gray',
+      }[log.alert_type] || 'badge-gray';
+
+      const date = new Date(log.sent_at).toLocaleString('en-UG', {
+        day:'2-digit', month:'short', hour:'2-digit', minute:'2-digit'
+      });
+
+      return `
+      <div class="px-4 py-3 space-y-1">
+        <div class="flex items-start justify-between gap-2">
+          <div>
+            <span class="font-medium text-sm text-gray-800">${esc(log.full_name)}</span>
+            <span class="badge ${typeBadge} ml-1">${log.alert_type}</span>
+          </div>
+          <span class="badge ${statusBadge} shrink-0">${log.gateway_status}</span>
+        </div>
+        <div class="text-xs text-gray-400 font-mono">${esc(log.phone_number)}</div>
+        <div class="text-xs text-gray-500 line-clamp-2">${esc(log.message_body)}</div>
+        <div class="text-xs text-gray-400">${date}</div>
+      </div>`;
+    }).join('');
+
+    const page = Math.floor(S.logsOffset / S.logsLimit) + 1;
+    document.getElementById('logs-page-label').textContent = `Page ${page}`;
+    document.getElementById('logs-prev').disabled = S.logsOffset === 0;
+    document.getElementById('logs-next').disabled = S.logsOffset + S.logsLimit >= data.total;
+  } catch(err) {
+    body.innerHTML = `<div class="px-4 py-6 text-center text-red-400 text-sm">${esc(err.message)}</div>`;
+  }
+}
+
+function logsPage(dir) {
+  S.logsOffset = Math.max(0, S.logsOffset + dir * S.logsLimit);
+  loadLogs();
+}
+
+// ── File upload (Feature A) ───────────────────────────────────────────
+function handleDragOver(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.add('drag-over');
+}
+function handleDragLeave() {
+  document.getElementById('drop-zone').classList.remove('drag-over');
+}
+function handleDrop(e) {
+  e.preventDefault();
+  document.getElementById('drop-zone').classList.remove('drag-over');
+  const file = e.dataTransfer?.files[0];
+  if (file) uploadFile(file);
+}
+function handleFileSelect(e) {
+  const file = e.target.files[0];
+  if (file) uploadFile(file);
+}
+
+async function uploadFile(file) {
+  const label   = document.getElementById('drop-label');
+  const icon    = document.getElementById('drop-icon');
+  const result  = document.getElementById('import-result');
+
+  label.textContent = `Uploading ${file.name}…`;
+  icon.textContent  = '⏳';
+  result.classList.add('hidden');
+
+  const form = new FormData();
+  form.append('file', file);
+
+  try {
+    const res = await fetch('/api/upload', {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || `HTTP ${res.status}`);
+
+    icon.textContent  = '✅';
+    label.textContent = 'Tap or drag file here';
+    result.classList.remove('hidden');
+    result.innerHTML = `
+      <p class="font-semibold text-brand-800">Import Complete</p>
+      <p class="text-gray-600">📄 Rows parsed: <strong>${data.parsed}</strong></p>
+      <p class="text-brand-700">✅ Inserted: <strong>${data.inserted}</strong></p>
+      ${data.skipped > 0 ? `<p class="text-amber-700">⚠️ Skipped: <strong>${data.skipped}</strong> (missing name/phone)</p>` : ''}
+      ${data.errors?.length > 0 ? `<details class="mt-1"><summary class="text-xs text-gray-500 cursor-pointer">Show errors</summary>
+        <pre class="text-xs text-red-500 mt-1 whitespace-pre-wrap">${esc(JSON.stringify(data.errors, null, 2))}</pre>
+      </details>` : ''}
+    `;
+    toast(`Imported ${data.inserted} records`, 'success');
+    loadRecords();
+  } catch(err) {
+    icon.textContent  = '❌';
+    label.textContent = 'Upload failed — try again';
+    result.classList.remove('hidden');
+    result.innerHTML  = `<p class="text-red-600">${esc(err.message)}</p>`;
+    toast('Upload failed: ' + err.message, 'error');
+  }
+
+  // Reset file input
+  document.getElementById('file-input').value = '';
+}
+
+// ── Download CSV template ─────────────────────────────────────────────
+function downloadTemplate() {
+  const rows = [
+    ['Name', 'Group', 'Phone', 'Balance'],
+    ['Aisha Nakato', 'P.6 East', '+256701234567', '150000'],
+    ['Brian Ssemanda', 'P.5 West', '+256772345678', '0'],
+    ['Caroline Atim', 'S.1 A', '+256753456789', '220000'],
+  ];
+  const csv   = rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n');
+  const blob  = new Blob([csv], { type: 'text/csv' });
+  const url   = URL.createObjectURL(blob);
+  const a     = document.createElement('a');
+  a.href      = url;
+  a.download  = 'alertledger_template.csv';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ── Add single record ─────────────────────────────────────────────────
+async function handleAddRecord(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-add-record');
+  btn.innerHTML = '<span class="spin"></span>Saving…';
+  btn.disabled = true;
+  try {
+    await api('POST', '/records', {
+      full_name:       document.getElementById('add-name').value,
+      category_group:  document.getElementById('add-group').value || 'General',
+      contact_phone:   document.getElementById('add-phone').value,
+      secondary_phone: document.getElementById('add-phone2').value,
+      current_balance: document.getElementById('add-balance').value || 0,
+    });
+    document.getElementById('form-add-record').reset();
+    toast('Record added ✅', 'success');
+    loadRecords();
+    showAppPage('dashboard');
+  } catch(err) {
+    toast(err.message, 'error');
+  } finally {
+    btn.textContent = 'Add Record';
+    btn.disabled = false;
+  }
+}
+
+// ── Edit modal ────────────────────────────────────────────────────────
+async function openEditModal(id) {
+  const record = S.records.find(r => r.id === id);
+  if (!record) return;
+
+  document.getElementById('modal-title').textContent = 'Edit Record';
+  document.getElementById('modal-body').innerHTML = `
+    <form onsubmit="submitEditModal(event, ${id})" class="space-y-3">
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Full Name</label>
+        <input class="inp" id="edit-name"    value="${esc(record.full_name)}" required/>
+      </div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Group</label>
+          <input class="inp" id="edit-group"   value="${esc(record.category_group)}"/>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-600 mb-1">Balance (UGX)</label>
+          <input class="inp" id="edit-balance" type="number" min="0" value="${record.current_balance}"/>
+        </div>
+      </div>
+      <div>
+        <label class="block text-xs font-semibold text-gray-600 mb-1">Primary Phone</label>
+        <input class="inp" id="edit-phone"   value="${esc(record.contact_phone)}" required/>
+      </div>
+      <div class="flex gap-2 pt-2">
+        <button type="submit" class="btn-primary flex-1">Save Changes</button>
+        <button type="button" onclick="confirmDelete(${id})" class="btn-danger">Delete</button>
+      </div>
+    </form>`;
+  openModal();
+}
+
+async function submitEditModal(e, id) {
+  e.preventDefault();
+  try {
+    await api('PUT', `/records/${id}`, {
+      full_name:       document.getElementById('edit-name').value,
+      category_group:  document.getElementById('edit-group').value,
+      contact_phone:   document.getElementById('edit-phone').value,
+      current_balance: document.getElementById('edit-balance').value,
+    });
+    closeModal();
+    toast('Record updated ✅', 'success');
+    loadRecords();
+  } catch(err) {
+    toast(err.message, 'error');
+  }
+}
+
+async function confirmDelete(id) {
+  if (!confirm('Delete this record? This cannot be undone.')) return;
+  try {
+    await api('DELETE', `/records/${id}`);
+    closeModal();
+    toast('Record deleted.', 'info');
+    S.selectedIds.delete(id);
+    loadRecords();
+  } catch(err) {
+    toast(err.message, 'error');
+  }
+}
+
+// ── Modal helpers ─────────────────────────────────────────────────────
+function openModal() {
+  document.getElementById('modal-overlay').classList.add('open');
+  document.body.style.overflow = 'hidden';
+}
+function closeModal() {
+  document.getElementById('modal-overlay').classList.remove('open');
+  document.body.style.overflow = '';
+}
+document.getElementById('modal-overlay').addEventListener('click', e => {
+  if (e.target === document.getElementById('modal-overlay')) closeModal();
+});
+
+// ── XSS escape ────────────────────────────────────────────────────────
+function esc(s) {
+  if (s === null || s === undefined) return '';
+  return String(s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// ── Boot: check session ───────────────────────────────────────────────
+(async function boot() {
+  try {
+    const me = await api('GET', '/auth/me');
+    S.user   = me;
+    document.getElementById('hdr-institution').textContent = me.institutionName;
+    showAppPage('dashboard');
+    loadRecords();
+    loadSmsStats();
+  } catch {
+    showAuthPage();
+  }
+})();
+</script>
+</body>
+</html>
