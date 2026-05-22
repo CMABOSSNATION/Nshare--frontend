@@ -1,0 +1,28 @@
+{
+  "name": "alertledger-engine",
+  "version": "1.0.0",
+  "description": "Event-Triggered Alert and Ledger Engine for Uganda local businesses and schools",
+  "main": "server.js",
+  "scripts": {
+    "start":   "node server.js",
+    "dev":     "SMS_SIMULATE=true NODE_ENV=development node --watch server.js",
+    "db:init": "node -e \"require('./backend/db')\"",
+    "seed":    "sqlite3 alertledger.db < backend/db/schema.sql"
+  },
+  "dependencies": {
+    "bcrypt":          "^5.1.1",
+    "better-sqlite3":  "^9.6.0",
+    "cookie-parser":   "^1.4.6",
+    "csv-parse":       "^5.5.6",
+    "dotenv":          "^16.4.5",
+    "express":         "^4.19.2",
+    "multer":          "^1.4.5-lts.1",
+    "xlsx":            "^0.18.5"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
